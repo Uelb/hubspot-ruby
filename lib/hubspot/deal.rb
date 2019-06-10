@@ -56,16 +56,16 @@ module Hubspot
       end
 
       def all(opts = {})
-        path = ALL_DEALS_PATH
-
         opts[:includeAssociations] = true # Needed for initialize to work
-        response = Hubspot::Connection.get_json(path, opts)
+        Hubspot::PagedCollection.new(opts) do |options, offset, limit|
+          response = Hubspot::Connection.get_json(
+            ALL_DEALS_PATH,
+            options.merge("limit" => limit, "offset" => offset)
+            )
 
-        result = {}
-        result['deals'] = response['deals'].map { |d| new(d) }
-        result['offset'] = response['offset']
-        result['hasMore'] = response['hasMore']
-        return result
+          deals = response["deals"].map { |result| Deal.new(result) }
+          [deals, response["offset"], response["hasMore"]]
+        end
       end
 
       # Find recent updated deals.

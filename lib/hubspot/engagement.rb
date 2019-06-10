@@ -7,7 +7,7 @@ module Hubspot
   # {http://developers.hubspot.com/docs/methods/engagements/create_engagement}
   #
   class Engagement
-    CREATE_ENGAGMEMENT_PATH = '/engagements/v1/engagements'
+    CREATE_ENGAGEMENT_PATH = '/engagements/v1/engagements'
     ENGAGEMENT_PATH = '/engagements/v1/engagements/:engagement_id'
     ASSOCIATE_ENGAGEMENT_PATH = '/engagements/v1/engagements/:engagement_id/associations/:object_type/:object_vid'
     GET_ASSOCIATED_ENGAGEMENTS = '/engagements/v1/engagements/associated/:objectType/:objectId/paged'
@@ -29,7 +29,7 @@ module Hubspot
 
     class << self
       def create!(params={})
-        response = Hubspot::Connection.post_json(CREATE_ENGAGMEMENT_PATH, params: {}, body: params )
+        response = Hubspot::Connection.post_json(CREATE_ENGAGEMENT_PATH, params: {}, body: params )
         new(HashWithIndifferentAccess.new(response))
       end
 
@@ -46,28 +46,31 @@ module Hubspot
         end
       end
 
-      def find_by_company(company_id)
-        find_by_association company_id, 'COMPANY'
+      def find_by_company(company_id, opts = {})
+        find_by_association company_id, 'COMPANY', opts
       end
 
-      def find_by_contact(contact_id)
-        find_by_association contact_id, 'CONTACT'
+      def find_by_contact(contact_id, opts = {})
+        find_by_association contact_id, 'CONTACT', opts
       end
 
-      def find_by_association(association_id, association_type)
+      def find_by_association(association_id, association_type, opts = {})
         path = GET_ASSOCIATED_ENGAGEMENTS
-        params = { objectType: association_type, objectId: association_id }
+        params = { objectType: association_type, objectId: association_id }.merge(opts)
         raise Hubspot::InvalidParams, 'expecting Integer parameter' unless association_id.try(:is_a?, Integer)
         raise Hubspot::InvalidParams, 'expecting String parameter' unless association_type.try(:is_a?, String)
-
-        engagements = []
         begin
-          response = Hubspot::Connection.get_json(path, params)
-          engagements = response["results"].try(:map) { |engagement| new(engagement) }
+          Hubspot::PagedCollection.new(params) do |options, offset, limit|
+            response = Hubspot::Connection.get_json(
+              path,
+              options.merge("limit" => limit, "offset" => offset)
+            )
+            engagements = response["results"].try(:map) { |engagement| Engagement.new(engagement) }
+            [engagements, response["offset"], response["hasMore"]]
+          end
         rescue => e
           raise e unless e.message =~ /not found/
         end
-        engagements
       end
 
       # Associates an engagement with an object
